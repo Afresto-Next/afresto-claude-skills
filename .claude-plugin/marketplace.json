@@ -1,0 +1,9 @@
+{
+  "name": "afresto",
+  "owner": { "name": "Afresto (PT Afresto Sistem Indonesia)", "email": "office@afresto.id" },
+  "plugins": [
+    { "name": "afresto-shared", "source": "./plugins/afresto-shared",
+      "description": "Skill BERSAMA Afresto Next (lintas repo): sistem desain Ocean (web + mobile).",
+      "version": "1.0.0", "author": { "name": "Afresto" } }
+  ]
+}
