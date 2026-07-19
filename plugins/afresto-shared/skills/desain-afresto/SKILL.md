@@ -6,8 +6,9 @@ description: >-
   (React Native/Expo, repo afresto-next-mobile). Berisi palet Ocean yang sudah
   DIHITUNG kontrasnya, konvensi komponen, dan JEBAKAN yang sudah menggigit (warna
   gagal WCAG, FAB tak bisa ditekan di Android, letterSpacing terpotong, hover mati di
-  layar sentuh). Picu saat: bikin halaman/komponen, pilih warna, header/gradien,
-  kartu/tombol/modal, tema Ocean, ikon berwarna, bilah tab.
+  layar sentuh, picker/bottom sheet menabrak nav bar Android). Picu saat: bikin
+  halaman/komponen, pilih warna, header/gradien, kartu/tombol/modal/picker/bottom sheet,
+  tema Ocean, ikon berwarna, bilah tab, atau apa pun yang menyentuh safe area (atas/bawah).
 ---
 
 # Sistem Desain Afresto ("Ocean")
@@ -88,6 +89,18 @@ warna — ~8% pria buta warna merah-hijau → sertakan bentuk/ikon/teks pendampi
 - **Header gradien membulat** (`components/ocean/OceanHeader.tsx`) dipakai semua halaman via prop
   `header` di layout — bukan diedit tiap layar.
 
+### Safe area (WAJIB — atas & bawah, Android + iOS)
+Hormati safe area lewat `react-native-safe-area-context` (`useSafeAreaInsets()`), **jangan** hardcode
+tinggi status/nav bar (beda tiap HP & versi OS).
+- **Atas** (status bar / notch): konten mulai di bawah `insets.top`. Header Ocean sudah menanganinya;
+  konten kustom di luar header pakai `insets.top`.
+- **Bawah** (nav bar 3-tombol/gesture Android + home indicator iOS): setiap **bottom sheet / picker /
+  modal / action sheet** dan **CTA yang menempel di bawah** WAJIB memberi ruang bawah:
+  - kontainer sheet: `paddingBottom: Math.max(insets.bottom, sp[3])`;
+  - list di dalam sheet: `contentContainerStyle={{ paddingBottom: insets.bottom + sp[3] }}`.
+  Tujuan: item terakhir & tombol **tidak pernah** ketutup bilah bawah. Uji di HP Android bernavigasi
+  gesture **dan** 3-tombol (tinggi berbeda).
+
 ### Tipografi
 - Mobile: **Sora hanya untuk ≥18sp** (judul & angka besar). Teks tubuh/label = **font sistem**
   (lebih cepat, akrab). Family & bobot sudah DIPASANGKAN di `type` — jangan campur sendiri.
@@ -111,6 +124,11 @@ warna — ~8% pria buta warna merah-hijau → sertakan bentuk/ikon/teks pendampi
    sentuh. Fix sudah ada: `@custom-variant hover (&:hover)` di `index.css`. Jangan hapus.
 5. **Status hanya-warna tak cukup** (buta warna) → sertakan ikon/bentuk/teks.
 6. **Modal backdrop-click menutup = kehilangan input.** Pola Afresto: tutup hanya via X/Esc.
+7. **Bottom sheet / picker menabrak nav bar Android.** Daftar pilihan (mis. picker Mapel di "Buat
+   Materi") yang tak memberi `paddingBottom: insets.bottom` → item terakhir **ketutup** tombol/gesture
+   navigasi bawah Android (dan home indicator iOS). Terbukti nyata. ➡️ Semua sheet/picker/modal & CTA
+   bawah WAJIB tambah `insets.bottom` via `useSafeAreaInsets` (lihat §3 "Safe area"). Jangan hardcode
+   tinggi nav bar — beda-beda per HP. Bug ini **tak muncul di simulator/HP tertentu** → uji lintas HP.
 
 ---
 
@@ -120,7 +138,9 @@ warna — ~8% pria buta warna merah-hijau → sertakan bentuk/ikon/teks pendampi
 2. Untuk komponen web, cek dulu `ui/` — kemungkinan besar sudah ada.
 3. Setiap warna teks: pastikan lolos AA (lihat tabel §2). Ragu → hitung.
 4. Mobile: pilih `shadow()` tingkat sekecil mungkin; hindari nested shadow di list.
-5. Lewati checklist §4 sebelum menyatakan selesai — terutama FAB (Android) & letterSpacing.
+5. Mobile: layar baru & **setiap picker/sheet/modal/CTA-bawah** → tambah `insets.bottom` (dan hormati
+   `insets.top`) via `useSafeAreaInsets`. Jangan hardcode tinggi bar.
+6. Lewati checklist §4 sebelum menyatakan selesai — terutama FAB (Android), letterSpacing & safe area.
 
 Terkait catatan proyek: design system Ocean & jebakan UI ada di memori
 `afresto-next-ui-redesign-ocean` dan `afresto-next-tailwind-hover-touchscreen`.
