@@ -1,7 +1,7 @@
 # afresto-claude-skills
 
 Marketplace plugin **publik** untuk skill Claude Code yang dipakai **BERSAMA** lintas repo Afresto
-(projectTwo & afresto-next-mobile) — satu sumber, satu standar.
+(projectTwo & afresto-next-mobile) — satu sumber, satu standar..
 
 > **Publik = baca-saja untuk umum.** Siapa pun boleh `clone`, tapi hak tulis tetap milik
 > owner/collaborator. Isinya hanya panduan sistem desain (tanpa token/rahasia). Repo dibuat
