@@ -8,11 +8,18 @@ Marketplace plugin **publik** untuk skill Claude Code yang dipakai **BERSAMA** l
 > publik supaya tim tak perlu diundang satu-satu untuk memakainya.
 
 ## Isi
-- `afresto-shared` → skill `desain-afresto` (sistem desain **Ocean**, web + mobile).
+Plugin `afresto-shared` berisi standar tim yang dipakai **bersama**:
+- `desain-afresto` — sistem desain **Ocean** (web + mobile).
+- `afresto-code-style` — gaya penulisan & **arsitektur modul** backend Go (routes/handler/service/repository/deps/dto, kelas A/B/C) + struktur web/mobile.
+- `afresto-testing` — strategi & konvensi test backend Go (piramida, mock tanpa library).
+- `afresto-deploy` — prosedur commit & deploy + gerbang mutu Go.
 
-Skill khas satu repo (`afresto-deploy`, `afresto-db-change`, `afresto-penilaian`, `afresto-mobile`)
-**TIDAK di sini** — mereka tinggal di `.claude/skills/` repo masing-masing dan ikut otomatis saat `git pull`
-(jalan di ekstensi VS Code maupun CLI, tanpa setup tambahan).
+Skill khas satu repo (`afresto-db-change`, `afresto-penilaian`, `afresto-mobile`)
+**TIDAK di sini** — mereka tinggal di `.claude/skills/` repo masing-masing dan ikut otomatis saat `git pull`.
+
+> **Ekstensi VS Code tidak memuat plugin marketplace** (lihat bawah). Karena itu, tiap skill di sini
+> juga di-mirror ke **`~/.claude/skills/`** (user-level) di mesin developer pengguna ekstensi — sumber
+> kebenaran tetap repo ini, user-level hanya salinan sinkron.
 
 ## ⚠️ Penting: skill dari marketplace butuh CLI
 `/plugin` (manajemen marketplace) **hanya tersedia di Claude Code CLI (terminal)** — **bukan** di
@@ -43,7 +50,8 @@ Pasang manual (kalau auto tak jalan):
 Dipanggil: `/afresto-shared:desain-afresto`.
 
 ## Update skill
-1. Edit `plugins/afresto-shared/skills/desain-afresto/SKILL.md` (sumber tunggal).
+1. Edit `plugins/afresto-shared/skills/<nama-skill>/SKILL.md` (sumber tunggal).
 2. Naikkan `version` di `.claude-plugin/marketplace.json` **dan** `plugins/afresto-shared/.claude-plugin/plugin.json`.
 3. Commit + push (perubahan sebaiknya lewat **PR**).
-4. Tim ambil versi baru: `/plugin marketplace update afresto` → `/reload-plugins`.
+4. Tim (CLI) ambil versi baru: `/plugin marketplace update afresto` → `/reload-plugins`.
+5. Pengguna **ekstensi VS Code**: sinkronkan mirror user-level → salin folder skill yang berubah ke `~/.claude/skills/`.
