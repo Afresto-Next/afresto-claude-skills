@@ -43,7 +43,7 @@ jalan di ekstensi.
 
 Pasang manual (kalau auto tak jalan):
 ```
-/plugin marketplace add ristology/afresto-claude-skills
+/plugin marketplace add Afresto-Next/afresto-claude-skills
 /plugin install afresto-shared@afresto
 /reload-plugins
 ```
