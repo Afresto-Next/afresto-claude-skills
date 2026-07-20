@@ -72,6 +72,13 @@ npx eas update --channel preview --environment preview --message "…" --non-int
 - Repo mobile pun bisa berisi kerja sesi lain → stage selektif; bila perlu build/OTA bersih pakai pola worktree yang sama.
 - OTA hanya JS/aset. Perubahan **modul native** → CRASH bila via OTA → wajib build ulang (bukan OTA).
 
+## 🏢 GHCR & organisasi GitHub — repo kini di org `Afresto-Next`
+Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `ristology/*` → **org `Afresto-Next`** (20 Jul 2026). Runbook transfer lengkap: **`docs/runbook-transfer-next-org.md`**.
+- 🚨 **Transfer repo ke org = path GHCR ikut owner → Watchtower BEKU DIAM-DIAM.** CI tag image `ghcr.io/${GITHUB_REPOSITORY_OWNER}/afresto-next-{api,web,migrate}` — owner mengikuti pemilik repo. Setelah transfer, image baru masuk `ghcr.io/afresto-next/*` TAPI VM `docker-compose.prod.yml` masih pull `ghcr.io/${GHCR_OWNER:-ristology}/*` → **produksi tak update** (image lama tetap jalan, TANPA error). **Package GHCR TIDAK ikut pindah** (tetap milik akun lama; org bikin package BARU yang **private**).
+  **FIX di VM** (`~/afresto-next`): set `GHCR_OWNER=afresto-next` di `.env` → `docker login ghcr.io` (PAT `read:packages`) → `pull api web migrate` → `up -d` → **`restart watchtower`** (watchtower bind `~/.docker/config.json`; tanpa restart pakai creds lama → auto-update mati senyap).
+  **Runner self-hosted + variabel Actions `DEPLOY_DIR` IKUT pindah otomatis** (tak perlu daftar ulang; tetap verifikasi Settings→Actions→Runners online). **Rollback**: balik `GHCR_OWNER` lama + pull/up. 🚫 **JANGAN hapus package `ghcr.io/ristology/*` lama** sampai path baru stabil beberapa siklus.
+- 🪤 **`docker compose pull` (tanpa argumen) GAGAL untuk image `:local`** (caddy/backup dibangun DI VM, bukan GHCR) → *"pull access denied … afresto-next-caddy"* — **WAJAR, abaikan**. Pull selektif `pull api web migrate`. `up -d` tak menariknya (image lokal sudah ada).
+
 ## Verifikasi tanpa akses langsung (probe dari luar)
 - **Rute baru ada?** `curl -o /dev/null -w '%{http_code}' https://afresto.co/api/v1/<rute>` → **401 = terdaftar** (backend baru naik), **404 = belum**. Host benar: `afresto.co` / `origin.afresto.co` + prefix `/api/v1`. `api.afresto.co` TIDAK ADA (selalu 404).
 - **Migrasi `schools` sehat?** `GET https://afresto.co/api/v1/public/branding?subdomain=demo` → 200 = `SELECT * schools` sehat.
