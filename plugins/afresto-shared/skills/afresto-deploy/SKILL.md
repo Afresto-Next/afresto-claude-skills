@@ -31,13 +31,26 @@ Padanan **Pint + PHPStan** ala Laravel untuk Go. Jalankan lokal sebelum stage be
 - ⚠️ **Status: gerbang CI belum aktif.** Belum ada `backend/.golangci.yml` maupun `.github/workflows/ci.yml`, dan `staticcheck` masih usang → jadi **format+build+vet ini manual dulu**. Rencana enforce di CI + config lengkap: **`docs/plan/00-tooling-quality-gate.md`**. Kode generated `internal/db/dbgen` **dikecualikan** dari lint.
 - Test menyertai perubahan → skill **afresto-testing** (`go test ./...`; integration ter-skip tanpa `TEST_DATABASE_URL`).
 
+## 🔴 Aturan #0 — JANGAN commit/push langsung ke `main` (tim 4 orang, sejak 25 Jul 2026)
+Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main` (merge = pemicu deploy).
+1. **Sebelum mulai**: `git checkout main && git pull` — bila ada migrasi baru, **jalankan migrasi** dulu.
+2. **Buat/checkout cabang bertema** SEBELUM menyentuh kode:
+   - fitur → `feat/<nama>` · bug → `bugfix/<nama>` · bug ber-issue → cabang baru + pelajari issue-nya.
+3. Commit selektif → **`git push -u origin <cabang>`** (BUKAN ke main).
+4. **Buka PR ke `main`**: `gh pr create` bila `gh` login; kalau belum, beri user URL
+   `https://github.com/Afresto-Next/next/compare/main...<cabang>?expand=1`.
+5. Reviewer approve & **merge** → deploy. **JANGAN merge PR sendiri.**
+- Bagian "Push backend / Deploy WEB" di bawah = mekanik yang jalan **SETELAH PR merge ke main**
+  (biasanya oleh yang bertugas deploy), bukan izin push langsung ke main.
+- Perubahan **skill** pun lewat PR (CODEOWNERS).
+
 ## Urutan langkah
 
 ### 1. Commit (Bash tool = Git Bash / sh, BUKAN PowerShell)
 - Pesan multi-baris: **heredoc** `git commit -q -F - <<'EOF' … EOF`. JANGAN `@'…'@` (itu here-string PowerShell → subjek tercemar jadi `@ ...`).
 - Akhiri pesan: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Warning "CRLF will be replaced by LF" = normal, abaikan.
-- Default branch `main`; user commit saat diminta.
+- Commit ke **cabang tugasmu** (`feat/*` · `bugfix/*`), **bukan** `main` (lihat Aturan #0). User commit saat diminta.
 
 ### 2. Migrasi DB — WAJIB di commit TIP
 `.github/workflows/migrate.yml` mendeteksi migrasi via `git diff --name-only HEAD~1 HEAD` (hanya commit teratas), berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`).
@@ -46,8 +59,8 @@ Padanan **Pint + PHPStan** ala Laravel untuk Go. Jalankan lokal sebelum stage be
 - **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (⚠️ `gh` CLI TIDAK terpasang di mesin dev — user cek manual). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
 - **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal (v102 = prod). Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
 
-### 3. Push backend
-`git push origin main` → GHCR → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend = tak perlu tunggu Watchtower.
+### 3. Push backend (SETELAH PR merge ke `main` — lihat Aturan #0)
+Merge PR → `main` diperbarui → GHCR → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend = tak perlu tunggu Watchtower. (Saat mengembangkan: `git push -u origin <cabang>` lalu PR — jangan push `main`.)
 
 ### 4. Deploy WEB — dari WORKTREE BERSIH (karena banyak tab agent)
 `npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit. Jadi build & deploy dari worktree di commit-mu:
