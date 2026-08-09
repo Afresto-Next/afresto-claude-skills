@@ -52,15 +52,62 @@ Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main`
 - Warning "CRLF will be replaced by LF" = normal, abaikan.
 - Commit ke **cabang tugasmu** (`feat/*` · `bugfix/*`), **bukan** `main` (lihat Aturan #0). User commit saat diminta.
 
+#### 🔴 JANGAN `git add -A` / `git add <dir>/` — sudah 3x menyapu berkas user
+Repo ini menyimpan **banyak berkas kerja user yang belum terlacak**: `docs/bskap/` (gambar+PDF),
+`docs/analisis butir soal/`, `elibrary/`, `cloudflare/**/.wrangler/` (cache akun). Sekali `-A`,
+semuanya ikut.
+
+Kejadian nyata: `git add docs/` menyeret PDF/xls/gambar BSKAP (25 Jul & 2 Agu); `git add -A`
+menyeret **446 berkas** termasuk `wrangler-account.json` (9 Agu).
+
+```sh
+git add path/ke/berkas1 path/ke/berkas2        # SATU PER SATU, selalu
+git commit -q -F - <<'EOF'
+...
+EOF
+git show --name-only --format="" HEAD | wc -l   # cocok dgn yang kamu niatkan?
+```
+Kalau jumlahnya melenceng: `git reset --soft HEAD~1 && git reset`, stage ulang yang benar.
+Bila sudah ter-push ke **cabang sendiri**, `git push --force-with-lease` aman.
+
 ### 2. Migrasi DB — WAJIB di commit TIP
 `.github/workflows/migrate.yml` mendeteksi migrasi via `git diff --name-only HEAD~1 HEAD` (hanya commit teratas), berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`).
 - Bila push berisi migrasi → migrasi **harus ada di commit TIP** (satu commit berisi migrasi+kode = aman).
 - Migrasi jalan **otomatis** di self-hosted runner VM setelah build. `run --rm migrate` sinkron → job GAGAL keras bila error (bukan senyap).
-- **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (⚠️ `gh` CLI TIDAK terpasang di mesin dev — user cek manual). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
+- **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
 - **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal (v102 = prod). Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
+
+#### 🔴 Nomor migrasi: periksa ulang TEPAT SEBELUM MERGE, bukan saat membuat cabang
+Rekan tim bisa men-merge seri migrasi lain **selagi cabangmu terbuka**. Nomor kembar membuat
+**goose PANIK di `sortAndConnectMigrations`** — bukan galat SQL, jadi mudah salah dibaca.
+✅ Tak ada kerusakan data: panik terjadi saat *mengumpulkan* daftar, sebelum satu pun dijalankan.
+
+Kejadian nyata (9 Agu 2026): dipilih `00138` saat membuat cabang; saat merge, tim sudah memakai
+`00138`–`00140`. Perbaikan pertama menamainya `00140` dan **masih bentrok** — karena menebak lagi.
+**Hitung, jangan tebak:**
+```sh
+git pull                                        # WAJIB dulu, biar lihat migrasi rekan
+MAX=$(ls backend/migrations/ | sed 's/_.*//' | sort -n | tail -1)
+NEXT=$(printf "%05d" $((10#$MAX + 1)))
+ls backend/migrations/ | sed 's/_.*//' | sort | uniq -d   # HARUS KOSONG
+```
+Kalau sudah terlanjur: `git mv` ke nomor baru, PR kecil, merge, lalu jalankan ulang workflow
+**"Migrate DB (self-hosted)"** dari tab Actions.
 
 ### 3. Push backend (SETELAH PR merge ke `main` — lihat Aturan #0)
 Merge PR → `main` diperbarui → GHCR → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend = tak perlu tunggu Watchtower. (Saat mengembangkan: `git push -u origin <cabang>` lalu PR — jangan push `main`.)
+
+#### ⚠️ SETELAH merge backend: CEK 502 (sudah kambuh 6x)
+Membuat-ulang container `api`/`worker` sering memicu outage total — semua container `Up` tapi
+seluruh rute 502. Praktis **tiap merge backend adalah lemparan dadu**.
+```sh
+curl -s -o /dev/null -w "%{http_code}
+" --max-time 15 https://next.afresto.co/api/v1/auth/me
+# 401 = SEHAT (minta autentikasi) · 502 = outage
+```
+Bila 502 → **Actions → "Ops — pulihkan API" → `restart-docker`** (tanpa SSH, pulih <1 menit).
+Jangan membedah fitur yang baru di-deploy: 502 + container `Up` = restart daemon Docker.
+Detail: `docs/ops-auto-pulih.md`.
 
 ### 4. Deploy WEB — dari WORKTREE BERSIH (karena banyak tab agent)
 `npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit. Jadi build & deploy dari worktree di commit-mu:
