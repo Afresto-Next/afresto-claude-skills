@@ -125,12 +125,45 @@ cd <repo-projectTwo> && git worktree remove --force /c/wtd && git worktree prune
 ### 5. Mobile OTA — repo terpisah, `--environment` WAJIB
 ```bash
 cd "<repo-mobile>"
-npx eas update --channel preview --environment preview --message "…" --non-interactive
+npx eas update --branch preview --environment preview --message "…" --non-interactive
 ```
-- 🔥 `--environment preview` **WAJIB** (tanpa itu update salah environment/gagal).
-- Production: `--channel production` (klien pasang dari Play). Repo mobile **tanpa remote git** → commit lokal saja.
-- Repo mobile pun bisa berisi kerja sesi lain → stage selektif; bila perlu build/OTA bersih pakai pola worktree yang sama.
-- OTA hanya JS/aset. Perubahan **modul native** → CRASH bila via OTA → wajib build ulang (bukan OTA).
+- 🔥 `--environment` **WAJIB** (preview/production) — tanpa itu update salah environment/gagal.
+- Repo mobile **punya remote GitHub** (`Afresto-Next/afresto-next-mobile`) → berlaku **Aturan #0**:
+  cabang → PR → merge, jangan push langsung ke `main`.
+- OTA hanya JS/aset. Perubahan **modul native** → CRASH bila via OTA → wajib **build ulang**.
+
+#### 🔥 `eas update` mengirim WORKING TREE, bukan commit
+Sama persis dengan `npm run build` di langkah 4 — **seluruh direktori kerja** ikut terbundel,
+termasuk pekerjaan setengah jadi sesi lain. Tanda `*` pada baris `Commit <hash>*` di hasil
+publikasi = **tree kotor**.
+
+**WAJIB tepat sebelum publish** — cetak, lalu **cocokkan** dengan baris `Commit` di hasil:
+```bash
+echo "publish dari: $(git branch --show-current) @ $(git log --oneline -1 --format=%h)"
+git log --oneline HEAD..origin/main   # KOSONG = tak ada pekerjaan orang lain yang tertinggal
+```
+- **Publikasikan dari `main`**, bukan cabang fitur. Dari cabang, pekerjaan orang lain yang sudah
+  merge **HILANG** dari channel — OTA mengganti **seluruh** bundel, tidak menambal.
+- **Produksi**: pinggirkan dulu perubahan tak-commit milik sesi lain
+  (`git stash push -- <berkas>` … `git stash pop`). Produksi tak boleh membawa kode yang belum ditinjau.
+
+#### 🚨 Cabang bisa BERPINDAH di tengah pekerjaan (banyak tab agent, satu klon)
+Kejadian **20 Agu 2026**: publikasi preview jelas dari `main @ d0938fa`; perintah **berikutnya**
+mendapati `HEAD` sudah di cabang lain `@ 8126a50` — sesi lain berpindah cabang di klon yang sama.
+**Produksi sempat menjalankan kode 3 PR lebih lama**, tanpa satu pun error.
+
+➡️ **Jangan berasumsi cabang masih sama antar-perintah.** Cetak ulang tiap kali (perintah di atas).
+➡️ **Pencegahan sesungguhnya: OTA dari WORKTREE**, sama seperti deploy web di langkah 4 —
+sesi lain tak bisa menggeser cabangnya:
+```bash
+rm -rf /c/wtm 2>/dev/null; git worktree add --detach /c/wtm <SHA-commit-mu>
+cd /c/wtm && git status --short          # harus KOSONG
+npm ci && npx eas update --branch <ch> --environment <env> --message "…" --non-interactive
+cd <repo-mobile> && git worktree remove --force /c/wtm && git worktree prune
+```
+🪤 Path worktree **pendek** (`/c/wtm`) — alasan sama dengan langkah 4.
+🪤 `npm ci` di worktree perlu waktu; untuk OTA kecil boleh tetap di klon utama **asal** verifikasi
+cabang+commit di atas dijalankan dan hasilnya cocok.
 
 ## 🏢 GHCR & organisasi GitHub — repo kini di org `Afresto-Next`
 Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `ristology/*` → **org `Afresto-Next`** (20 Jul 2026). Runbook transfer lengkap: **`docs/runbook-transfer-next-org.md`**.
@@ -149,7 +182,8 @@ Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `risto
 1. `git status` → hanya berkasku ter-stage; sesi lain utuh.
 2. Migrasi (bila ada) di commit TIP; Actions "Migrate DB" hijau.
 3. Web dari worktree bersih `/c/wtd`; worktree dibersihkan setelahnya.
-4. OTA pakai `--environment`.
+4. OTA pakai `--environment`, **dari `main`**, dan cabang+commit dicetak lalu **dicocokkan**
+   dengan baris `Commit` di hasil publikasi (`*` = tree kotor, kerja sesi lain ikut terkirim).
 5. Backend butuh Watchtower ~5 mnt sebelum diuji; web cukup Ctrl+F5.
 6. Sentuh auth/nilai? Pertimbangkan `/code-review` pada diff dulu.
 
