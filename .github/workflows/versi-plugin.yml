@@ -1,0 +1,29 @@
+name: Pagar versi plugin
+
+# Skill berubah tanpa versi dinaikkan = perubahan yang TIDAK PERNAH sampai ke tim, tanpa galat
+# dan tanpa tanda apa pun. Sudah terjadi: 20 Agu 2026, terlantar 15 hari sampai ada yang
+# membandingkan sha cache dengan sha marketplace. README mengatur langkahnya sejak awal — yang
+# tak ada adalah yang menegakkannya. Ini penegaknya.
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - '.claude-plugin/**'
+
+jobs:
+  versi:
+    name: Skill berubah wajib menaikkan versi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Wajib: skrip membandingkan isi berkas pada commit DASAR dengan commit PR.
+          # Checkout dangkal membuat `git show <base>:<berkas>` gagal.
+          fetch-depth: 0
+
+      - name: Periksa kenaikan versi
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/cek-versi-plugin.sh

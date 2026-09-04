@@ -53,5 +53,10 @@ Dipanggil: `/afresto-shared:desain-afresto`.
 1. Edit `plugins/afresto-shared/skills/<nama-skill>/SKILL.md` (sumber tunggal).
 2. Naikkan `version` di `.claude-plugin/marketplace.json` **dan** `plugins/afresto-shared/.claude-plugin/plugin.json`.
 3. Commit + push (perubahan sebaiknya lewat **PR**).
+   🔒 CI **menolak** PR yang menyentuh `skills/**` tanpa menaikkan versi di **kedua** berkas
+   (`.github/workflows/versi-plugin.yml`). Pagar ini ada karena langkah 2 pernah terlewat pada
+   20 Agu 2026 — perubahan `afresto-deploy` terlantar 15 hari, tanpa galat & tanpa tanda apa pun,
+   karena klien menyimpulkan "sudah terbaru" dari nomor versi yang tak berubah.
+   Uji lokal sebelum push: `BASE=<sha-main> HEAD=HEAD bash .github/scripts/cek-versi-plugin.sh`
 4. Tim (CLI) ambil versi baru: `/plugin marketplace update afresto` → `/reload-plugins`.
 5. Pengguna **ekstensi VS Code**: sinkronkan mirror user-level → salin folder skill yang berubah ke `~/.claude/skills/`.
