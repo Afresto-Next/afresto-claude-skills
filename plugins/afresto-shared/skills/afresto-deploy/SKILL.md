@@ -31,6 +31,48 @@ Padanan **Pint + PHPStan** ala Laravel untuk Go. Jalankan lokal sebelum stage be
 - ⚠️ **Status: gerbang CI belum aktif.** Belum ada `backend/.golangci.yml` maupun `.github/workflows/ci.yml`, dan `staticcheck` masih usang → jadi **format+build+vet ini manual dulu**. Rencana enforce di CI + config lengkap: **`docs/plan/00-tooling-quality-gate.md`**. Kode generated `internal/db/dbgen` **dikecualikan** dari lint.
 - Test menyertai perubahan → skill **afresto-testing** (`go test ./...`; integration ter-skip tanpa `TEST_DATABASE_URL`).
 
+## 🔴 Aturan #00 — pekerjaan BERMAKNA masuk GitHub issue DULU (sejak 5 Sep 2026)
+
+Berlaku **sebelum** Aturan #0 (cabang + PR): sebelum menyentuh kode sama sekali.
+
+Tujuannya bukan formalitas. Permintaan yang datang lewat obrolan hanya diketahui dua pihak —
+tim tak bisa membacanya, pemilik tak punya tempat menugaskan, dan modulnya tak meninggalkan
+jejak siapa mengerjakan apa.
+
+### Kapan WAJIB issue
+Fitur baru · perubahan yang **dilihat sekolah** · perubahan **skema DB** · apa pun yang butuh
+**keputusan produk** · pekerjaan yang lebih dari satu PR.
+
+### Kapan TIDAK perlu
+Bug yang jelas & sempit · koreksi teks/label · dokumentasi · tindak lanjut langsung dari
+komentar review PR.
+
+Ragu → buat issue. Murah, dan bisa ditutup. **Ambang ini yang menjaga aturannya hidup:** kalau
+setiap permintaan sepele jadi issue, orang akan mulai melewatinya diam-diam, dan sekali dilewati
+tanpa akibat, aturannya mati.
+
+### Yang dilakukan agen
+1. **Telusuri kode secukupnya** untuk mengisi "temuan awal" & menemukan blocker — jangan menebak.
+2. **Buat issue** pakai template `.github/ISSUE_TEMPLATE/pekerjaan.md`, beri **label `modul:*`**
+   (itu yang membentuk catatan per modul), plus `butuh-keputusan` bila ada yang menggantung.
+3. **BERHENTI.** Jangan koding, jangan buat cabang, **jangan menugaskan diri sendiri**.
+   Penugasan adalah tindakan pemilik; tim juga perlu ruang memberi masukan/merevisi ide.
+4. Laporkan nomor issue-nya ke pemilik, beserta keputusan yang masih menggantung (bila ada).
+
+🔑 **Pemilik boleh melewatinya** dengan bilang "kerjakan sekarang" — issue tetap dibuat sebagai
+catatan, pekerjaan jalan terus. Aturan ini mengatur bawaan, bukan memenjarakan.
+
+### Blocker yang baru ketahuan DI TENGAH pengerjaan
+Beri tahu **sebelum** melanjutkan: **komentar di issue** (supaya tim ikut melihat) *dan* sampaikan
+ke pemilik. Bila keputusannya menghentikan pekerjaan → tambah label `butuh-keputusan`.
+Jangan diam-diam memilih tafsir sendiri lalu jalan terus — itu yang menghasilkan pekerjaan yang
+"selesai" tapi salah.
+
+### Menutup lingkarannya
+PR wajib memuat **`Closes #<nomor>`** di badannya. Itu yang menyambungkan issue → PR → orang,
+sehingga `gh issue list --label modul:ujian --state all` menjadi catatan siapa mengerjakan apa
+di modul itu. Tanpa baris itu, jejaknya putus.
+
 ## 🔴 Aturan #0 — JANGAN commit/push langsung ke `main` (tim 4 orang, sejak 25 Jul 2026)
 Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main` (merge = pemicu deploy).
 1. **Sebelum mulai**: `git checkout main && git pull` — bila ada migrasi baru, **jalankan migrasi** dulu.
