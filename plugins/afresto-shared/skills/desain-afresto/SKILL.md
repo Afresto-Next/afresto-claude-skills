@@ -88,6 +88,10 @@ warna — ~8% pria buta warna merah-hijau → sertakan bentuk/ikon/teks pendampi
   Ikon yang sama untuk fitur yang sama di mana pun (konsistensi = "satu aplikasi").
 - **Header gradien membulat** (`components/ocean/OceanHeader.tsx`) dipakai semua halaman via prop
   `header` di layout — bukan diedit tiap layar.
+  🚨 **TAPI header itu TIDAK otomatis muncul.** Root Stack (`app/_layout.tsx`) memakai default
+  `headerShown: false`; setiap layar BARU yang ingin ber-header **WAJIB menulis eksplisit**:
+  `<Stack.Screen options={{ title: '…', headerShown: true }} />`. `title` saja TIDAK cukup —
+  headernya tak dirender sama sekali dan konten naik menabrak status bar. Lihat jebakan № 10.
 
 ### Safe area (WAJIB — atas & bawah, Android + iOS)
 Hormati safe area lewat `react-native-safe-area-context` (`useSafeAreaInsets()`), **jangan** hardcode
@@ -146,6 +150,18 @@ native seperti keyboard-controller → butuh rebuild/CRASH lewat OTA): pakai **`
 
 ---
 
+10. **🚨 Layar mobile tanpa `headerShown: true` = TANPA header & MENABRAK safe area — sudah
+   menggigit 3×** (jurnal-kelas mobile#13 · mapel-pilihan mobile#98 · ujian-pengawas mobile#100,
+   7 Sep 2026). Polanya selalu sama: layar baru menulis `<Stack.Screen options={{ title: '…' }} />`
+   tanpa `headerShown: true`, padahal root Stack default `headerShown: false` dengan OceanHeader
+   kustom via prop `header` → header TAK dirender sama sekali, tombol kembali hilang, konten
+   naik ke area status bar (iOS & Android sekaligus). `tsc` tidak menangkapnya, dan di layar
+   kecil kadang tampak "hampir benar" — baru ketahuan saat dipakai sungguhan.
+   ➡️ CHECKLIST layar baru: (a) `<Stack.Screen options={{ title, headerShown: true }} />` di
+   baris pertama render; (b) buka layarnya sekali dan LIHAT headernya ada, sebelum menyatakan
+   selesai. Pengecualian sadar: layar yang memang tanpa header (login, /share) — sebut alasannya
+   di komentar.
+
 ## 5. Alur kerja saat mendesain
 
 1. Buka sumber tunggal (`tokens.ts` / `index.css`) — pakai token yang ADA. Warna baru → tambah di sana.
@@ -155,6 +171,8 @@ native seperti keyboard-controller → butuh rebuild/CRASH lewat OTA): pakai **`
 5. Mobile: layar baru & **setiap picker/sheet/modal/CTA-bawah** → tambah `insets.bottom` (dan hormati
    `insets.top`) via `useSafeAreaInsets`. Jangan hardcode tinggi bar.
 6. Lewati checklist §4 sebelum menyatakan selesai — terutama FAB (Android), letterSpacing & safe area.
+7. **Layar mobile BARU: `headerShown: true` eksplisit di `Stack.Screen`** (jebakan № 10 — 3×
+   menggigit), lalu buka layarnya dan pastikan header Ocean benar-benar tampil.
 
 Terkait catatan proyek: design system Ocean & jebakan UI ada di memori
 `afresto-next-ui-redesign-ocean` dan `afresto-next-tailwind-hover-touchscreen`.
