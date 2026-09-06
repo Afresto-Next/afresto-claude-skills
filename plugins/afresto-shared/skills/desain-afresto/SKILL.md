@@ -138,18 +138,6 @@ native seperti keyboard-controller → butuh rebuild/CRASH lewat OTA): pakai **`
    navigasi bawah Android (dan home indicator iOS). Terbukti nyata. ➡️ Semua sheet/picker/modal & CTA
    bawah WAJIB tambah `insets.bottom` via `useSafeAreaInsets` (lihat §3 "Safe area"). Jangan hardcode
    tinggi nav bar — beda-beda per HP. Bug ini **tak muncul di simulator/HP tertentu** → uji lintas HP.
-10. **🚨 Layar mobile tanpa `headerShown: true` = TANPA header & MENABRAK safe area — sudah
-   menggigit 3×** (jurnal-kelas mobile#13 · mapel-pilihan mobile#98 · ujian-pengawas mobile#100,
-   7 Sep 2026). Polanya selalu sama: layar baru menulis `<Stack.Screen options={{ title: '…' }} />`
-   tanpa `headerShown: true`, padahal root Stack default `headerShown: false` dengan OceanHeader
-   kustom via prop `header` → header TAK dirender sama sekali, tombol kembali hilang, konten
-   naik ke area status bar (iOS & Android sekaligus). `tsc` tidak menangkapnya, dan di layar
-   kecil kadang tampak "hampir benar" — baru ketahuan saat dipakai sungguhan.
-   ➡️ CHECKLIST layar baru: (a) `<Stack.Screen options={{ title, headerShown: true }} />` di
-   baris pertama render; (b) buka layarnya sekali dan LIHAT headernya ada, sebelum menyatakan
-   selesai. Pengecualian sadar: layar yang memang tanpa header (login, /share) — sebut alasannya
-   di komentar.
-
 8. **🔒 Penyimpanan lokal per-SISWA di HP WAJIB di-scope `uid`.** HP sekolah dipakai bergantian →
    draft/jawaban/hasil yang disimpan per-ID-konten SAJA (tanpa uid) **bocor ke akun berikutnya**
    (siswa B lihat/kirim jawaban siswa A). Terbukti (latihan). ➡️ Kunci AsyncStorage `...:<uid>:<id>`;
@@ -161,6 +149,18 @@ native seperti keyboard-controller → butuh rebuild/CRASH lewat OTA): pakai **`
    jangan dihitung → saring ke yang benar-benar actionable.
 
 ---
+
+10. **🚨 Layar mobile tanpa `headerShown: true` = TANPA header & MENABRAK safe area — sudah
+   menggigit 3×** (jurnal-kelas mobile#13 · mapel-pilihan mobile#98 · ujian-pengawas mobile#100,
+   7 Sep 2026). Polanya selalu sama: layar baru menulis `<Stack.Screen options={{ title: '…' }} />`
+   tanpa `headerShown: true`, padahal root Stack default `headerShown: false` dengan OceanHeader
+   kustom via prop `header` → header TAK dirender sama sekali, tombol kembali hilang, konten
+   naik ke area status bar (iOS & Android sekaligus). `tsc` tidak menangkapnya, dan di layar
+   kecil kadang tampak "hampir benar" — baru ketahuan saat dipakai sungguhan.
+   ➡️ CHECKLIST layar baru: (a) `<Stack.Screen options={{ title, headerShown: true }} />` di
+   baris pertama render; (b) buka layarnya sekali dan LIHAT headernya ada, sebelum menyatakan
+   selesai. Pengecualian sadar: layar yang memang tanpa header (login, /share) — sebut alasannya
+   di komentar.
 
 ## 5. Alur kerja saat mendesain
 
