@@ -118,6 +118,8 @@ Bila sudah ter-push ke **cabang sendiri**, `git push --force-with-lease` aman.
 - Migrasi jalan **otomatis** di self-hosted runner VM setelah build. `run --rm migrate` sinkron → job GAGAL keras bila error (bukan senyap).
 - **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
 - **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal (v102 = prod). Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
+- 🔴 **Nama berkas migrasi = STEMPEL WAKTU** (`YYYYMMDDHHMMSS_nama.sql`, sejak 15 Sep 2026) — buat HANYA lewat `bash backend/scripts/migrasi-baru.sh nama_snake`; JANGAN mengetik nomor urut (`00357_…`): `cek-migrasi.sh`/CI menolaknya. Nomor urut adalah satu pencacah yang dibagi 9 orang → tabrakan lahir SETELAH PR hijau (5× dalam 6 minggu; 15 Sep `00345×2` menghentikan migrasi prod). Prod `goose up -allow-missing` → urutan merge tak penting; berkas 5-digit lama dibiarkan. Rincian: `docs/technique/11-migrasi-stempel-waktu.md`.
+- **Tepat sebelum merge** PR yang menyentuh `backend/internal/db/` (sqlc): `git fetch origin && git merge origin/main` → bila `querier.go`/`models.go` konflik, selesaikan dengan `sqlc generate`, bukan tangan. Tabrakan kode hasil generate adalah sisa risiko yang tak diselesaikan stempel waktu.
 
 #### 🔴 Nomor migrasi: periksa ulang TEPAT SEBELUM MERGE, bukan saat membuat cabang
 Rekan tim bisa men-merge seri migrasi lain **selagi cabangmu terbuka**. Nomor kembar membuat
