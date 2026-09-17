@@ -4,14 +4,15 @@ description: >-
   Prosedur commit & deploy Afresto Next (repo projectTwo: backend Go + web React/Cloudflare
   Worker; repo terpisah afresto-next-mobile RN/Expo). WAJIB dibaca sebelum commit/push/deploy/
   OTA di project ini. Berisi urutan aman + JEBAKAN yang sudah menggigit: banyak tab agent aktif
-  (jangan git add -a), migrasi harus di commit TIP (migrate.yml lihat HEAD~1), build web dari
-  WORKTREE BERSIH (npm build baca seluruh tree), path worktree wajib pendek, eas --environment wajib.
+  (jangan git add -a), RILIS = TAG VERSI vX.Y.Z — merge ke main TIDAK men-deploy (label `patch`
+  sebelum merge → tag → deploy; migrasi dideteksi per rentang rilis, tak perlu di commit TIP), build
+  web dari WORKTREE BERSIH (npm build baca seluruh tree), path worktree wajib pendek, eas --environment wajib.
 ---
 
 # Deploy Afresto Next
 
-Tumpukan: **backend Go** (push→GHCR→Watchtower ~5 mnt) · **web React** (Vite→Cloudflare Worker,
-manual `wrangler deploy`) · **mobile** RN/Expo di **repo terpisah** `<repo-mobile>`
+Tumpukan: **backend Go** (tag versi→GHCR→Watchtower ~5 mnt) · **web React** (Vite→Cloudflare Worker,
+otomatis saat tag versi; `wrangler deploy` manual hanya darurat) · **mobile** RN/Expo di **repo terpisah** `<repo-mobile>`
 (EAS OTA). Deploy produksi = **selalu minta izin user dulu** (mereka menyetujui tiap kali).
 
 ## 🔴 Aturan #1 — repo ini sering dipakai BANYAK TAB AGENT sekaligus
@@ -74,17 +75,40 @@ sehingga `gh issue list --label modul:ujian --state all` menjadi catatan siapa m
 di modul itu. Tanpa baris itu, jejaknya putus.
 
 ## 🔴 Aturan #0 — JANGAN commit/push langsung ke `main` (tim 4 orang, sejak 25 Jul 2026)
-Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main` (merge = pemicu deploy).
+Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main`. **Merge ≠ deploy** —
+produksi berubah saat **tag versi** lahir (lihat "Rilis = tag versi" di bawah).
 1. **Sebelum mulai**: `git checkout main && git pull` — bila ada migrasi baru, **jalankan migrasi** dulu.
 2. **Buat/checkout cabang bertema** SEBELUM menyentuh kode:
    - fitur → `feat/<nama>` · bug → `bugfix/<nama>` · bug ber-issue → cabang baru + pelajari issue-nya.
 3. Commit selektif → **`git push -u origin <cabang>`** (BUKAN ke main).
 4. **Buka PR ke `main`**: `gh pr create` bila `gh` login; kalau belum, beri user URL
    `https://github.com/Afresto-Next/next/compare/main...<cabang>?expand=1`.
-5. Reviewer approve & **merge** → deploy. **JANGAN merge PR sendiri.**
-- Bagian "Push backend / Deploy WEB" di bawah = mekanik yang jalan **SETELAH PR merge ke main**
-  (biasanya oleh yang bertugas deploy), bukan izin push langsung ke main.
+5. Reviewer approve & **merge** → kode menunggu di `main` sampai rilis berikutnya. **JANGAN merge PR sendiri.**
+- Bagian "Rilis backend / Deploy WEB" di bawah = mekanik yang jalan **SETELAH tag versi lahir**
+  (biasanya oleh yang bertugas rilis), bukan izin push langsung ke main.
 - Perubahan **skill** pun lewat PR (CODEOWNERS).
+
+## 🏷️ Rilis = tag versi `vX.Y.Z` (sejak 17 Sep 2026 — `docs/technique/13-tag-versi-otomatis.md`)
+Merge ke `main` hanya menjalankan CI. Produksi berubah saat tag **`vX.Y.Z`** lahir:
+- **Jalur biasa**: tempel label **`patch`** di PR **sebelum** merge → `tag-patch.yml` membuat tag
+  `vX.Y.(Z+1)` di commit merge-nya, memicu deploy, lalu mengomentari nomor tag di PR. Rilis itu membawa
+  **semua** yang di-merge sejak tag sebelumnya, bukan hanya PR berlabel `patch`.
+- **Jalur manual** (naik minor/major, rilis tanpa PR): `git tag -a v1.1.0 -m "…" && git push origin v1.1.0`.
+- Yang jalan setelah tag: `docker.yml` (image GHCR `latest` + `<sha>` + `vX.Y.Z`, hanya image yang berubah
+  sejak versi sebelumnya) → Watchtower; `migrate.yml` (bila `backend/migrations/` berubah sejak versi
+  sebelumnya); `deploy-web.yml` (bila `web/**`/worker berubah). "Apa yang berubah" dihitung
+  `.github/scripts/rentang-rilis.sh` — dari git, bukan payload.
+- 🪤 **Label ditempel SETELAH merge tak berbuat apa-apa** (dibaca dari payload saat PR ditutup) → `git tag`
+  manual, atau PR kosong berlabel `patch`.
+- 🪤 **"Sudah di-merge kok belum live?"** → cek dulu: sudah ada tag setelah merge itu? Kalau belum, memang
+  belum rilis — jangan membedah kodenya.
+- 🪤 **Tag dari `GITHUB_TOKEN` tidak memicu `push: tags`** → tag-patch.yml memanggil deploy lewat
+  `workflow_dispatch` (pengecualian resmi). Workflow baru yang "mendengar tag" harus didaftarkan di sana
+  juga, atau ia hanya jalan untuk tag manual.
+- **Rollback**: `IMAGE_TAG=v1.0.2` di `.env` VM → `pull`/`up -d`; atau `workflow_dispatch` docker.yml pada
+  tag lama **dengan `paksa_semua`** (tanpa itu hanya image yang berubah di rilis itu yang dibangun →
+  produksi campur dua versi).
+- Rilis beruntun aman: `concurrency` + `queue: max` mengantre tag & build berurutan.
 
 ## Urutan langkah
 
@@ -112,11 +136,11 @@ git show --name-only --format="" HEAD | wc -l   # cocok dgn yang kamu niatkan?
 Kalau jumlahnya melenceng: `git reset --soft HEAD~1 && git reset`, stage ulang yang benar.
 Bila sudah ter-push ke **cabang sendiri**, `git push --force-with-lease` aman.
 
-### 2. Migrasi DB — WAJIB di commit TIP
-`.github/workflows/migrate.yml` mendeteksi migrasi via `git diff --name-only HEAD~1 HEAD` (hanya commit teratas), berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`).
-- Bila push berisi migrasi → migrasi **harus ada di commit TIP** (satu commit berisi migrasi+kode = aman).
+### 2. Migrasi DB — dideteksi per RENTANG RILIS (tak perlu di commit TIP lagi)
+`.github/workflows/migrate.yml` berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`) dan menerapkan migrasi bila `backend/migrations/` berubah **sejak tag versi sebelumnya** (`rentang-rilis.sh`). Aturan lama "migrasi harus di commit TIP" (`HEAD~1` — Insiden #3 `docs/kejadian-error.md`) **sudah tidak berlaku** sejak 17 Sep 2026.
 - Migrasi jalan **otomatis** di self-hosted runner VM setelah build. `run --rm migrate` sinkron → job GAGAL keras bila error (bukan senyap).
-- **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
+- Migrasi ikut rilis berikutnya — **kode & migrasi mendarat bersama** saat tag lahir, bukan saat merge.
+- **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk tag rilis itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
 - **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal (v102 = prod). Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
 - 🔴 **Nama berkas migrasi = STEMPEL WAKTU** (`YYYYMMDDHHMMSS_nama.sql`, sejak 15 Sep 2026) — buat HANYA lewat `bash backend/scripts/migrasi-baru.sh nama_snake`; JANGAN mengetik nomor urut (`00357_…`): `cek-migrasi.sh`/CI menolaknya. Nomor urut adalah satu pencacah yang dibagi 9 orang → tabrakan lahir SETELAH PR hijau (5× dalam 6 minggu; 15 Sep `00345×2` menghentikan migrasi prod). Prod `goose up -allow-missing` → urutan merge tak penting; berkas 5-digit lama dibiarkan. Rincian: `docs/technique/11-migrasi-stempel-waktu.md`.
 - **Tepat sebelum merge** PR yang menyentuh `backend/internal/db/` (sqlc): `git fetch origin && git merge origin/main` → bila `querier.go`/`models.go` konflik, selesaikan dengan `sqlc generate`, bukan tangan. Tabrakan kode hasil generate adalah sisa risiko yang tak diselesaikan stempel waktu.
@@ -138,12 +162,12 @@ ls backend/migrations/ | sed 's/_.*//' | sort | uniq -d   # HARUS KOSONG
 Kalau sudah terlanjur: `git mv` ke nomor baru, PR kecil, merge, lalu jalankan ulang workflow
 **"Migrate DB (self-hosted)"** dari tab Actions.
 
-### 3. Push backend (SETELAH PR merge ke `main` — lihat Aturan #0)
-Merge PR → `main` diperbarui → GHCR → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend = tak perlu tunggu Watchtower. (Saat mengembangkan: `git push -u origin <cabang>` lalu PR — jangan push `main`.)
+### 3. Rilis backend (SETELAH tag versi lahir — lihat "Rilis = tag versi")
+Tag `vX.Y.Z` → `docker.yml` → GHCR (`latest` + `<sha>` + `vX.Y.Z`) → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend sejak versi sebelumnya = image backend tak dibangun, tak perlu tunggu Watchtower. (Saat mengembangkan: `git push -u origin <cabang>` lalu PR — jangan push `main`.)
 
-#### ⚠️ SETELAH merge backend: CEK 502 (sudah kambuh 6x)
+#### ⚠️ SETELAH rilis backend: CEK 502 (sudah kambuh 6x)
 Membuat-ulang container `api`/`worker` sering memicu outage total — semua container `Up` tapi
-seluruh rute 502. Praktis **tiap merge backend adalah lemparan dadu**.
+seluruh rute 502. Praktis **tiap rilis backend adalah lemparan dadu**.
 ```sh
 curl -s -o /dev/null -w "%{http_code}
 " --max-time 15 https://next.afresto.co/api/v1/auth/me
@@ -153,8 +177,8 @@ Bila 502 → **Actions → "Ops — pulihkan API" → `restart-docker`** (tanpa 
 Jangan membedah fitur yang baru di-deploy: 502 + container `Up` = restart daemon Docker.
 Detail: `docs/ops-auto-pulih.md`.
 
-### 4. Deploy WEB — dari WORKTREE BERSIH (karena banyak tab agent)
-`npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit. Jadi build & deploy dari worktree di commit-mu:
+### 4. Deploy WEB manual (DARURAT saja) — dari WORKTREE BERSIH (karena banyak tab agent)
+Normalnya web ter-deploy **otomatis** oleh `deploy-web.yml` saat tag versi lahir (bila `web/**` berubah). Jalur manual di bawah hanya bila workflow itu mati. `npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit. Jadi build & deploy dari worktree di commit-mu:
 ```bash
 rm -rf /c/wtd 2>/dev/null; git worktree add --detach /c/wtd <SHA-commit-mu>
 cd /c/wtd && git status --short   # harus KOSONG (bersih)
@@ -224,11 +248,12 @@ Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `risto
 ## 🔥 Checklist ringkas sebelum bilang "selesai"
 0. Backend? `gofmt -l backend` kosong + `go build`/`vet` hijau + test menyertai (afresto-testing).
 1. `git status` → hanya berkasku ter-stage; sesi lain utuh.
-2. Migrasi (bila ada) di commit TIP; Actions "Migrate DB" hijau.
+2. Rilis? Label `patch` sudah menempel **sebelum** merge (atau `git tag` manual) — merge saja tidak men-deploy.
+   Migrasi (bila ada): Actions "Migrate DB" hijau untuk tag rilis itu (rentang versi sebelumnya..versi ini).
 3. Web dari worktree bersih `/c/wtd`; worktree dibersihkan setelahnya.
 4. OTA pakai `--environment`, **dari `main`**, dan cabang+commit dicetak lalu **dicocokkan**
    dengan baris `Commit` di hasil publikasi (`*` = tree kotor, kerja sesi lain ikut terkirim).
-5. Backend butuh Watchtower ~5 mnt sebelum diuji; web cukup Ctrl+F5.
+5. Backend butuh Watchtower ~5 mnt **setelah tag** sebelum diuji; web cukup Ctrl+F5.
 6. Sentuh auth/nilai? Pertimbangkan `/code-review` pada diff dulu.
 
 Terkait: `afresto-db-change` · `afresto-code-style` (arsitektur berlapis) · `afresto-testing` · `docs/plan/00` (gerbang mutu) · memori `afresto-next-jebakan-rekayasa` (§11b migrate.yml, §11 heredoc), `afresto-next-progress-2026-07-17-sore` (pola worktree), `afresto-next-gcp-vm-deploy`, `afresto-next-frontend-cloudflare-worker`.
