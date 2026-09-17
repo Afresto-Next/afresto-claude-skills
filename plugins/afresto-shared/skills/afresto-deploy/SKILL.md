@@ -104,7 +104,9 @@ Merge ke `main` hanya menjalankan CI. Produksi berubah saat tag **`vX.Y.Z`** lah
   belum rilis — jangan membedah kodenya.
 - 🪤 **Tag dari `GITHUB_TOKEN` tidak memicu `push: tags`** → tag-patch.yml memanggil deploy lewat
   `workflow_dispatch` (pengecualian resmi). Workflow baru yang "mendengar tag" harus didaftarkan di sana
-  juga, atau ia hanya jalan untuk tag manual.
+  juga, atau ia hanya jalan untuk tag manual. Hal yang sama membunuh `workflow_run` di hop berikutnya
+  (run beraktor `github-actions[bot]` tak memicu apa pun — v1.0.1: migrasi tak terpanggil, senyap) →
+  di repo ini workflow memanggil workflow lain **hanya** lewat `workflow_dispatch` eksplisit.
 - **Rollback**: `IMAGE_TAG=v1.0.2` di `.env` VM → `pull`/`up -d`; atau `workflow_dispatch` docker.yml pada
   tag lama **dengan `paksa_semua`** (tanpa itu hanya image yang berubah di rilis itu yang dibangun →
   produksi campur dua versi).
@@ -137,7 +139,7 @@ Kalau jumlahnya melenceng: `git reset --soft HEAD~1 && git reset`, stage ulang y
 Bila sudah ter-push ke **cabang sendiri**, `git push --force-with-lease` aman.
 
 ### 2. Migrasi DB — dideteksi per RENTANG RILIS (tak perlu di commit TIP lagi)
-`.github/workflows/migrate.yml` berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`) dan menerapkan migrasi bila `backend/migrations/` berubah **sejak tag versi sebelumnya** (`rentang-rilis.sh`). Aturan lama "migrasi harus di commit TIP" (`HEAD~1` — Insiden #3 `docs/kejadian-error.md`) **sudah tidak berlaku** sejak 17 Sep 2026.
+`.github/workflows/migrate.yml` dipanggil `docker.yml` (job `migrasi`, `workflow_dispatch`) **setelah** semua image sukses dan menerapkan migrasi bila `backend/migrations/` berubah **sejak tag versi sebelumnya** (`rentang-rilis.sh`). Aturan lama "migrasi harus di commit TIP" (`HEAD~1` — Insiden #3 `docs/kejadian-error.md`) **sudah tidak berlaku** sejak 17 Sep 2026.
 - Migrasi jalan **otomatis** di self-hosted runner VM setelah build. `run --rm migrate` sinkron → job GAGAL keras bila error (bukan senyap).
 - Migrasi ikut rilis berikutnya — **kode & migrasi mendarat bersama** saat tag lahir, bukan saat merge.
 - **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk tag rilis itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
