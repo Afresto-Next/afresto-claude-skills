@@ -4,8 +4,9 @@ description: >-
   Prosedur commit & deploy Afresto Next (repo projectTwo: backend Go + web React/Cloudflare
   Worker; repo terpisah afresto-next-mobile RN/Expo). WAJIB dibaca sebelum commit/push/deploy/
   OTA di project ini. Berisi urutan aman + JEBAKAN yang sudah menggigit: banyak tab agent aktif
-  (jangan git add -a), migrasi harus di commit TIP (migrate.yml lihat HEAD~1), build web dari
-  WORKTREE BERSIH (npm build baca seluruh tree), path worktree wajib pendek, eas --environment wajib.
+  (jangan git add -a), migrasi ber-STEMPEL WAKTU & dideteksi per rentang rilis (bukan commit TIP),
+  build web dari WORKTREE BERSIH (npm build baca seluruh tree), path worktree wajib pendek,
+  eas --environment wajib.
 ---
 
 # Deploy Afresto Next
@@ -28,7 +29,7 @@ Padanan **Pint + PHPStan** ala Laravel untuk Go. Jalankan lokal sebelum stage be
 - **Format:** `cd backend && gofmt -l .` → **harus KOSONG**. Ada isi → `gofmt -w .` (auto-fix), stage hasilnya. (Padanan `pint --test`.)
 - **Build + vet:** `go build ./... && go vet ./...` hijau.
 - **Analisis statis (target):** `golangci-lint run ./...` (bungkus gofmt/govet/staticcheck/errcheck/ineffassign/unused/misspell). Padanan `phpstan analyse`.
-- ⚠️ **Status: gerbang CI belum aktif.** Belum ada `backend/.golangci.yml` maupun `.github/workflows/ci.yml`, dan `staticcheck` masih usang → jadi **format+build+vet ini manual dulu**. Rencana enforce di CI + config lengkap: **`docs/plan/00-tooling-quality-gate.md`**. Kode generated `internal/db/dbgen` **dikecualikan** dari lint.
+- ✅ **Gerbang CI SUDAH aktif** (sejak 22 Jul 2026): `.github/workflows/ci.yml` menjalankan **Backend quality gate** (gofmt-check + build + vet + test), **Web quality gate** (tsc + vitest), **Static analysis (golangci-lint)** — hanya kode yang diubah — dan **Migrasi — pagar tabrakan nomor**. Config: `backend/.golangci.yml`; kode generated `internal/db/dbgen` **dikecualikan**. Menjalankan gofmt/build/vet lokal tetap lebih cepat daripada menunggu CI merah.
 - Test menyertai perubahan → skill **afresto-testing** (`go test ./...`; integration ter-skip tanpa `TEST_DATABASE_URL`).
 
 ## 🔴 Aturan #00 — pekerjaan BERMAKNA masuk GitHub issue DULU (sejak 5 Sep 2026)
@@ -112,31 +113,35 @@ git show --name-only --format="" HEAD | wc -l   # cocok dgn yang kamu niatkan?
 Kalau jumlahnya melenceng: `git reset --soft HEAD~1 && git reset`, stage ulang yang benar.
 Bila sudah ter-push ke **cabang sendiri**, `git push --force-with-lease` aman.
 
-### 2. Migrasi DB — WAJIB di commit TIP
-`.github/workflows/migrate.yml` mendeteksi migrasi via `git diff --name-only HEAD~1 HEAD` (hanya commit teratas), berjalan **setelah** "Build & Push Docker Images" sukses (`workflow_run`).
-- Bila push berisi migrasi → migrasi **harus ada di commit TIP** (satu commit berisi migrasi+kode = aman).
+### 2. Migrasi DB — dideteksi per RENTANG rilis (bukan commit TIP)
+`.github/workflows/migrate.yml` dipanggil **`docker.yml`** (job `migrasi`, lewat `workflow_dispatch`) setelah semua image sukses, lalu menerapkan migrasi bila `backend/migrations/` berubah pada rentang `dari`..`sampai` — rentang yang **sama** dengan yang dipakai membangun image, dihitung `.github/scripts/rentang-rilis.sh` dari tag penanda **`deploy/docker`** (digeser job `tandai` ke commit yang baru sukses).
+- **Migrasi TIDAK harus ada di commit TIP.** Taruh di commit mana pun; rentangnya mencakup seluruh push / rebase-merge. (Aturan "wajib di TIP" berlaku sampai pertengahan Sep 2026, ketika deteksinya masih `git diff HEAD~1 HEAD` — Insiden #3 `docs/kejadian-error.md`: migrasi di commit tengah terlewat, prod menjalankan kode baru di atas skema lama. Jangan menyusun ulang commit atau membuat commit boneka demi aturan yang sudah tak ada.)
+- Gagal membaca rentang = **semua dianggap berubah** → migrasi tetap diterapkan (aman: `goose` hanya menjalankan yang belum tercatat). Jadi mode gagalnya condong ke "terlalu rajin", bukan "terlewat".
+- 🪤 Jangan mengusulkan `workflow_run` ("setelah Build & Push selesai") — itu **tidak menyala** bila run docker-nya dipicu `GITHUB_TOKEN` (aktor `github-actions[bot]`). Terjadi pada v1.0.1, 17 Sep 2026: image dibangun, migrasi tak pernah dipanggil, tanpa galat.
 - Migrasi jalan **otomatis** di self-hosted runner VM setelah build. `run --rm migrate` sinkron → job GAGAL keras bila error (bukan senyap).
+- Perlu memaksa (mis. migrasi tertunda dari deploy yang gagal): tab **Actions → "Migrate DB (self-hosted)" → Run workflow**, biarkan `paksa` tercentang — rentang diabaikan.
 - **Verifikasi migrasi**: cek tab **Actions → "Migrate DB" hijau** untuk commit itu (`gh` CLI **tersedia**: `gh run list --workflow="Migrate DB (self-hosted)" --limit 1` — agen bisa cek sendiri, tak perlu menyuruh user). Watchtower tukar image `api` di poll berikutnya (~5 mnt), hampir selalu setelah migrasi selesai.
-- **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal (v102 = prod). Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
+- **SEBELUM** push migrasi, verifikasi SQL-nya via psql `BEGIN; … ROLLBACK;` di DB lokal. 🪤 Samakan dulu DB lokal ke migrasi terbaru (`goose … up`) — DB dev yang tertinggal membuat hasil uji menyesatkan, dan gejalanya menipu: kolom yang kurang pada tabel ber-`SELECT *` muncul sebagai **404 "sekolah tidak ditemukan"**, bukan galat kolom. Lihat skill `afresto-db-change` / jebakan-rekayasa §4.
 - 🔴 **Nama berkas migrasi = STEMPEL WAKTU** (`YYYYMMDDHHMMSS_nama.sql`, sejak 15 Sep 2026) — buat HANYA lewat `bash backend/scripts/migrasi-baru.sh nama_snake`; JANGAN mengetik nomor urut (`00357_…`): `cek-migrasi.sh`/CI menolaknya. Nomor urut adalah satu pencacah yang dibagi 9 orang → tabrakan lahir SETELAH PR hijau (5× dalam 6 minggu; 15 Sep `00345×2` menghentikan migrasi prod). Prod `goose up -allow-missing` → urutan merge tak penting; berkas 5-digit lama dibiarkan. Rincian: `docs/technique/11-migrasi-stempel-waktu.md`.
 - **Tepat sebelum merge** PR yang menyentuh `backend/internal/db/` (sqlc): `git fetch origin && git merge origin/main` → bila `querier.go`/`models.go` konflik, selesaikan dengan `sqlc generate`, bukan tangan. Tabrakan kode hasil generate adalah sisa risiko yang tak diselesaikan stempel waktu.
 
-#### 🔴 Nomor migrasi: periksa ulang TEPAT SEBELUM MERGE, bukan saat membuat cabang
-Rekan tim bisa men-merge seri migrasi lain **selagi cabangmu terbuka**. Nomor kembar membuat
-**goose PANIK di `sortAndConnectMigrations`** — bukan galat SQL, jadi mudah salah dibaca.
+#### 🔴 Kenapa nomor urut ditinggalkan — jangan hidupkan lagi
+Nomor kembar membuat **goose PANIK di `sortAndConnectMigrations`** — bukan galat SQL, jadi mudah
+salah dibaca; seluruh migrasi prod berhenti sampai dibereskan.
 ✅ Tak ada kerusakan data: panik terjadi saat *mengumpulkan* daftar, sebelum satu pun dijalankan.
 
-Kejadian nyata (9 Agu 2026): dipilih `00138` saat membuat cabang; saat merge, tim sudah memakai
-`00138`–`00140`. Perbaikan pertama menamainya `00140` dan **masih bentrok** — karena menebak lagi.
-**Hitung, jangan tebak:**
-```sh
-git pull                                        # WAJIB dulu, biar lihat migrasi rekan
-MAX=$(ls backend/migrations/ | sed 's/_.*//' | sort -n | tail -1)
-NEXT=$(printf "%05d" $((10#$MAX + 1)))
-ls backend/migrations/ | sed 's/_.*//' | sort | uniq -d   # HARUS KOSONG
-```
-Kalau sudah terlanjur: `git mv` ke nomor baru, PR kecil, merge, lalu jalankan ulang workflow
-**"Migrate DB (self-hosted)"** dari tab Actions.
+Nomor urut adalah **satu pencacah yang dibagi sembilan orang**, jadi tiap pagar per-PR hanyalah
+balapan: 9 Agu 2026 nomor dipilih saat membuat cabang lalu bentrok saat merge, dan perbaikan
+pertamanya **masih bentrok** karena menebak lagi; 15 Sep 2026 tabrakan bahkan lahir **sesudah** PR
+hijau. Itu sebabnya sejak 15 Sep namanya stempel waktu (lihat butir di atas) — **jangan** kembali
+menghitung `MAX+1`, dan jangan menulis skrip pembantu untuknya: `cek-migrasi.sh` menolak berkas
+baru bernomor urut.
+
+Kalau MASIH ketemu berkas 5-digit kembar (peninggalan sebelum 15 Sep): `git mv` yang merge
+belakangan ke **nama stempel waktu** (`bash backend/scripts/migrasi-baru.sh` untuk formatnya), PR
+kecil, merge, lalu **Actions → "Migrate DB (self-hosted)" → Run workflow** dengan `paksa`.
+🪤 Nomor lama sering dirujuk di luar berkas migrasi (`docs/plan/*`, `TODO.md`, komentar kode) —
+jangan `sed` global; nomor yang sama bisa milik migrasi lain yang harus tetap.
 
 ### 3. Push backend (SETELAH PR merge ke `main` — lihat Aturan #0)
 Merge PR → `main` diperbarui → GHCR → **Watchtower ~5 mnt** menukar image. Tak ada perubahan backend = tak perlu tunggu Watchtower. (Saat mengembangkan: `git push -u origin <cabang>` lalu PR — jangan push `main`.)
@@ -224,7 +229,8 @@ Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `risto
 ## 🔥 Checklist ringkas sebelum bilang "selesai"
 0. Backend? `gofmt -l backend` kosong + `go build`/`vet` hijau + test menyertai (afresto-testing).
 1. `git status` → hanya berkasku ter-stage; sesi lain utuh.
-2. Migrasi (bila ada) di commit TIP; Actions "Migrate DB" hijau.
+2. Migrasi (bila ada) ber-stempel waktu dari `migrasi-baru.sh`; Actions "Migrate DB (self-hosted)"
+   hijau untuk deploy itu (boleh di commit mana pun — deteksinya per rentang).
 3. Web dari worktree bersih `/c/wtd`; worktree dibersihkan setelahnya.
 4. OTA pakai `--environment`, **dari `main`**, dan cabang+commit dicetak lalu **dicocokkan**
    dengan baris `Commit` di hasil publikasi (`*` = tree kotor, kerja sesi lain ikut terkirim).
