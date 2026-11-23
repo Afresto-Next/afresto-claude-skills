@@ -1,4 +1,4 @@
-# afresto-claude-skills
+# Afresto Claude Skills
 
 Marketplace plugin **publik** untuk skill Claude Code yang dipakai **BERSAMA** lintas repo Afresto
 (projectTwo & afresto-next-mobile) — satu sumber, satu standar.
