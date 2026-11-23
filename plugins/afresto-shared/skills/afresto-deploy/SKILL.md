@@ -5,15 +5,21 @@ description: >-
   Worker; repo terpisah afresto-next-mobile RN/Expo). WAJIB dibaca sebelum commit/push/deploy/
   OTA di project ini. Berisi urutan aman + JEBAKAN yang sudah menggigit: banyak tab agent aktif
   (jangan git add -a), migrasi ber-STEMPEL WAKTU & dideteksi per rentang rilis (bukan commit TIP),
-  build web dari WORKTREE BERSIH (npm build baca seluruh tree), path worktree wajib pendek,
+  deploy backend & web OTOMATIS pada merge ke main (JANGAN wrangler deploy manual - balapan bisa
+  memundurkan produksi tanpa galat; titik izin user = MERGE), OTA mobile masih manual dengan
   eas --environment wajib.
 ---
 
 # Deploy Afresto Next
 
-Tumpukan: **backend Go** (push→GHCR→Watchtower ~5 mnt) · **web React** (Vite→Cloudflare Worker,
-manual `wrangler deploy`) · **mobile** RN/Expo di **repo terpisah** `<repo-mobile>`
-(EAS OTA). Deploy produksi = **selalu minta izin user dulu** (mereka menyetujui tiap kali).
+Tumpukan: **backend Go** (push→GHCR→Watchtower ~5 mnt) · **web React**
+(Vite→Cloudflare Worker, **otomatis tiap merge ke `main`** lewat Actions) · **mobile** RN/Expo
+di **repo terpisah** `<repo-mobile>` (EAS OTA, **masih manual**).
+
+🔑 **Backend & web menayang sendiri begitu PR merge** — jadi titik izin bergeser: yang
+meminta persetujuan user adalah **MERGE**, bukan langkah deploy sesudahnya. Merge ke `main` =
+menayangkan. OTA mobile tetap tindakan terpisah dan **selalu minta izin user dulu** (mereka
+menyetujui tiap kali).
 
 ## 🔴 Aturan #1 — repo ini sering dipakai BANYAK TAB AGENT sekaligus
 `git status` kerap menampilkan berkas termodifikasi **milik sesi lain**. Karena itu:
@@ -83,8 +89,9 @@ Semua kerja lewat **cabang + Pull Request**; hanya reviewer yang merge ke `main`
 4. **Buka PR ke `main`**: `gh pr create` bila `gh` login; kalau belum, beri user URL
    `https://github.com/Afresto-Next/next/compare/main...<cabang>?expand=1`.
 5. Reviewer approve & **merge** → deploy. **JANGAN merge PR sendiri.**
-- Bagian "Push backend / Deploy WEB" di bawah = mekanik yang jalan **SETELAH PR merge ke main**
-  (biasanya oleh yang bertugas deploy), bukan izin push langsung ke main.
+- Bagian "Push backend / Deploy WEB" di bawah = mekanik yang jalan **SETELAH PR merge ke main**,
+  dan keduanya **berjalan sendiri** — yang masih dikerjakan orang hanyalah OTA mobile & verifikasi.
+  Bukan izin push langsung ke main.
 - Perubahan **skill** pun lewat PR (CODEOWNERS).
 
 ## Urutan langkah
@@ -158,18 +165,62 @@ Bila 502 → **Actions → "Ops — pulihkan API" → `restart-docker`** (tanpa 
 Jangan membedah fitur yang baru di-deploy: 502 + container `Up` = restart daemon Docker.
 Detail: `docs/ops-auto-pulih.md`.
 
-### 4. Deploy WEB — dari WORKTREE BERSIH (karena banyak tab agent)
-`npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit. Jadi build & deploy dari worktree di commit-mu:
+### 4. Deploy WEB — OTOMATIS tiap merge ke `main` (sejak 17 Sep 2026, #824)
+
+**Tak ada langkah manual.** Workflow **`Deploy Web (Cloudflare)`** (`.github/workflows/deploy-web.yml`)
+menyala pada tiap push ke `main`: build dari checkout bersih → `wrangler deploy` → job `tandai`
+menggeser tag penanda **`deploy/web`** ke commit itu.
+
+Kenapa ini ada: dulu web di-deploy manual dari laptop → sering terlewat → frontend tertinggal
+backend berhari-hari (19–20 Jul 2026: 12 commit web menumpuk, fitur ditandai "LIVE" padahal belum).
+
+- **Dilewati** bila commit hanya menyentuh `docs/**` · `**.md` · `.claude/**` (`paths-ignore`),
+  atau bila `web/**` & `cloudflare/web-worker/**` tak berubah sejak penanda `deploy/web`.
+  `deploy: skipped` + `changes: success` = produksi memang **sudah sejajar**, bukan kegagalan.
+- **Verifikasi — jangan mengaku "sudah tayang" tanpa ini:**
+  ```bash
+  RID=$(gh run list --workflow="Deploy Web (Cloudflare)" --limit 1 --json databaseId -q '.[0].databaseId')
+  gh run view $RID --json jobs -q '.jobs[] | "\(.name): \(.conclusion)"'   # changes · deploy · tandai
+  git fetch origin 'refs/tags/deploy/web:refs/tags/deploy/web' -f -q
+  git rev-parse --short deploy/web      # HARUS = commit merge-mu
+  ```
+  Penanda `deploy/web` adalah bukti terkuat: job `tandai` hanya menggesernya bila deploy sukses
+  atau dilewati — deploy yang gagal/dibatalkan **tak** menggesernya.
+- Cloudflare cache aset ~20 dtk → uji dengan **Ctrl+F5**. (200 tapi ukuran ~397 byte = fallback,
+  bukan aset asli.)
+
+#### 🔴 JANGAN `wrangler deploy` dari laptop sebagai langkah rutin
+Deploy otomatis berangkat dari `main`; deploy manual berangkat dari commit yang **kamu** pilih.
+Bila keduanya berjalan berdekatan, **yang selesai terakhir menang** — produksi bisa MUNDUR ke
+commit lebih lama **tanpa satu pun galat**. Deploy manual juga tak menggeser penanda `deploy/web`,
+jadi keadaan yang tercatat berbeda dari yang tayang, dan verifikasi di atas justru menyesatkan.
+
+Perlu memaksa deploy (job gagal, secret hilang, atau ingin menayangkan ref tertentu)?
+➡️ **Actions → "Deploy Web (Cloudflare)" → Run workflow** pada ref pilihanmu.
+`workflow_dispatch` men-deploy **tanpa syarat**, tetap dari checkout bersih, dan tetap
+menggeser penanda.
+
+<details><summary>Build lokal — hanya bila Actions sendiri tak bisa dipakai</summary>
+
+`npm run build` membaca **SELURUH working tree** → pekerjaan setengah jadi sesi lain ikut terbit.
+Jadi build & deploy dari worktree di commit-mu:
 ```bash
-rm -rf /c/wtd 2>/dev/null; git worktree add --detach /c/wtd <SHA-commit-mu>
+git worktree remove --force /c/wtd 2>/dev/null; git worktree prune
+git worktree add --detach /c/wtd <SHA-commit-mu>
 cd /c/wtd && git status --short   # harus KOSONG (bersih)
 cd /c/wtd/web && npm ci && npm run build
 cd /c/wtd/cloudflare/web-worker && npx wrangler deploy
 cd <repo-projectTwo> && git worktree remove --force /c/wtd && git worktree prune
 ```
-- 🔥 **Path worktree WAJIB PENDEK** (`/c/wtd`) — scratchpad dalam + nama PDF kaldik DKI yang panjang → error Windows *"Filename too long"* saat checkout.
-- Verifikasi bundel benar bila perlu: `grep -rl "<penanda fiturmu>" /c/wtd/web/dist/assets/*.js` — tapi hati-hati **positif palsu** (penanda umum bisa dari fitur lain).
-- Cloudflare cache aset ~20 dtk → uji dengan **Ctrl+F5**. (200 tapi ukuran ~397 byte = fallback, bukan aset asli.)
+- 🔥 **Path worktree WAJIB PENDEK** (`/c/wtd`) — scratchpad dalam + nama PDF kaldik DKI
+  yang panjang → error Windows *"Filename too long"* saat checkout.
+- 🪄 **Jangan `rm -rf /c/wtd`** — pemeriksaan keselamatan Claude Code menolaknya (terbaca
+  seperti direktori tingkat atas) dan perintahnya TAK dijalankan; pakai `git worktree remove --force`.
+- Node **24** + `NODE_OPTIONS=--max-old-space-size=6144` — samakan dengan workflow &
+  `web/Dockerfile`. Node 20 gagal (`registerHooks` belum ada); heap 4096 sudah OOM (#1241).
+- Verifikasi bundel benar bila perlu: `grep -rl "<penanda fiturmu>" /c/wtd/web/dist/assets/*.js`
+  — tapi hati-hati **positif palsu** (penanda umum bisa dari fitur lain).
+</details>
 
 ### 5. Mobile OTA — repo terpisah, `--environment` WAJIB
 ```bash
@@ -229,12 +280,17 @@ Repo (`next`, `afresto-next-mobile`, `afresto-claude-skills`) pindah dari `risto
 ## 🔥 Checklist ringkas sebelum bilang "selesai"
 0. Backend? `gofmt -l backend` kosong + `go build`/`vet` hijau + test menyertai (afresto-testing).
 1. `git status` → hanya berkasku ter-stage; sesi lain utuh.
-2. Migrasi (bila ada) ber-stempel waktu dari `migrasi-baru.sh`; Actions "Migrate DB (self-hosted)"
-   hijau untuk deploy itu (boleh di commit mana pun — deteksinya per rentang).
-3. Web dari worktree bersih `/c/wtd`; worktree dibersihkan setelahnya.
+2. Migrasi (bila ada) ber-stempel waktu dari `migrasi-baru.sh`; Actions
+   **"Migrate DB + rollout container (self-hosted)"** hijau untuk deploy itu (boleh di commit mana
+   pun — deteksinya per rentang). 🪄 Nama workflow itu PANJANG:
+   `gh run list --workflow="Migrate DB (self-hosted)"` gagal *"could not find any workflows
+   named"* — pakai nama utuhnya, atau `gh workflow list` dulu.
+3. Web: Actions **"Deploy Web (Cloudflare)"** hijau untuk commit merge-mu **dan** penanda
+   `deploy/web` sudah bergeser ke sana. JANGAN `wrangler deploy` manual — balapan dengan deploy
+   otomatis bisa memundurkan produksi tanpa galat.
 4. OTA pakai `--environment`, **dari `main`**, dan cabang+commit dicetak lalu **dicocokkan**
    dengan baris `Commit` di hasil publikasi (`*` = tree kotor, kerja sesi lain ikut terkirim).
-5. Backend butuh Watchtower ~5 mnt sebelum diuji; web cukup Ctrl+F5.
+5. Backend butuh Watchtower ~5 mnt sebelum diuji; web tunggu workflow selesai (±3–5 mnt) lalu Ctrl+F5.
 6. Sentuh auth/nilai? Pertimbangkan `/code-review` pada diff dulu.
 
 Terkait: `afresto-db-change` · `afresto-code-style` (arsitektur berlapis) · `afresto-testing` · `docs/plan/00` (gerbang mutu) · memori `afresto-next-jebakan-rekayasa` (§11b migrate.yml, §11 heredoc), `afresto-next-progress-2026-07-17-sore` (pola worktree), `afresto-next-gcp-vm-deploy`, `afresto-next-frontend-cloudflare-worker`.
